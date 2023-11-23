@@ -59,6 +59,61 @@ const getProducts = asyncHandler(async (req, res) => {
 
   res.json({ products, page, pages: Math.ceil(count / pageSize) });
 });
+
+const getEventsByLocation = asyncHandler(async (req, res) => {
+  const pageSize = process.env.PAGINATION_LIMIT;
+  const page = Number(req.query.pageNumber) || 1;
+
+  const keyword = req.query.keyword
+    ? {
+        $or: [
+          {
+            address: {
+              $regex: req.query.keyword,
+              $options: 'i',
+            },
+          },
+          {
+            city: {
+              $regex: req.query.keyword,
+              $options: 'i',
+            },
+          },
+          {
+            postcode: {
+              $regex: req.query.keyword,
+              $options: 'i',
+            },
+          },
+        ],
+      }
+    : {};
+
+  let geolocationQuery = {};
+  if (req.query.latitude && req.query.longitude && req.query.radius) {
+    const { latitude, longitude, radius } = req.query;
+    geolocationQuery = {
+      location: {
+        $geoWithin: {
+          $centerSphere: [
+            [parseFloat(longitude), parseFloat(latitude)],
+            radius / 3963.2, // Radius in miles
+          ],
+        },
+      },
+    };
+  }
+
+  const count = await Product.countDocuments({
+    ...keyword,
+    ...geolocationQuery,
+  });
+  const products = await Product.find({ ...keyword, ...geolocationQuery })
+    .limit(pageSize)
+    .skip(pageSize * (page - 1));
+
+  res.json({ products, page, pages: Math.ceil(count / pageSize) });
+});
 // @desc    Fetch single product
 // @route   GET /api/products/:id
 // @access  Public
@@ -225,4 +280,5 @@ export {
   deleteProduct,
   createProductReview,
   getTopProducts,
+  getEventsByLocation,
 };
